@@ -1,0 +1,5 @@
+﻿RTYPE,COST,IMPACT
+ATight,0.025,10
+BTight,0.03,7
+CTight,0.035,5
+HVAC,0.1,2
