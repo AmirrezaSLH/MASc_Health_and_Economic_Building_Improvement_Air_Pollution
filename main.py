@@ -25,11 +25,13 @@ import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
 
+import numpy as np
+
 Out_Put_Dir = r'C:\Users\asalehi\OneDrive - University of Waterloo\Documents - SaariLab\CVC\Buildings\Amirreza\Adaptation\Github_Adaptation\MASc_Waterloo_Adaptation_Buildings\Data'
 
 #%% Plot Functions 
-def NPV_Plot(gdf_list):
-    PNG_Dir = r'C:\Users\asalehi\OneDrive - University of Waterloo\Documents - SaariLab\CVC\Buildings\Amirreza\Adaptation\Plots\Beta\\'
+def NPV_Plot(gdf_list, PNG_Dir = r'C:\Users\asalehi\OneDrive - University of Waterloo\Documents - SaariLab\CVC\Buildings\Amirreza\Adaptation\Plots\Beta\\'):
+    
     y = 1981
     for i in gdf_list:
         i.plot( column = i['Benefit_individal'], legend = True, cmap= 'turbo' )
@@ -39,8 +41,32 @@ def NPV_Plot(gdf_list):
         #plt.title('POP' + str(y))
         #plt.savefig(PNG_Dir + 'Population' + str(y) +'.PNG')
         y += 1
-    return 0
+    return
 
+def Map_Plot(gdf, value, title, pallet = 'turbo', name = '1', PNG_dir = r'C:\Users\asalehi\OneDrive - University of Waterloo\Documents - SaariLab\CVC\Buildings\Amirreza\Adaptation\Plots\\'):
+    gdf.plot(column = value, legend = True, cmap = pallet)
+    plt.title(title, fontsize=9.5)
+    plt.savefig(PNG_dir + name+'.PNG')
+    return
+
+def Plot_Histogram(Plot_Values ,Plot_Title):
+    # Plotting the histogram
+    n, bins, patches = plt.hist(Plot_Values)
+    #sum_n = sum(n)
+    #n = n / sum_n
+    #n = n = np.around(100 * (n / sum_n), 2)
+    # Adding count above each bar
+    for count, patch in zip(n, patches):
+        plt.text(patch.get_x() + patch.get_width() / 2, patch.get_height(), 
+                 f'{int(count)}', ha='center', va='bottom')
+    
+    # Setting the title
+    plt.title(Plot_Title)
+    
+    # Show the plot
+    plt.show()
+    
+    return
 # %% Initializing Functions
 def init_AQ_Grids( dir = 'Data/AQgrid.gpkg'):
     #This Function Loads the AQ Grids
@@ -107,24 +133,101 @@ def init_Retrofit_Type( dir = 'Data/Retrofit_Types.csv' ):
 def PM_to_Grid_gdf(PM_Concentrations = init_PM_Concentrations() , AQ_Grid_gdf = init_AQ_Grids()): 
     return
 '''
-def ACH50_to_County(Buildings_Stock_df, County_gdf = init_County() ):
+def ACH50_to_County_2(Buildings_Stock_df = init_Buildings_Stock(), County_gdf = init_County() ):
     #This Function assigns average value of ACH50 to each County
     #The Current Method for Averaging is per building
     County_List = County_gdf['FIPS'].to_list()
+    BT_List = Buildings_Stock_df['type'].unique().tolist()
     Buildings_Stock_df_Copy = Buildings_Stock_df.copy(deep = True)
     ACH50_dict = dict()
     for C in County_List:
         Target_Stock = Buildings_Stock_df_Copy[ Buildings_Stock_df_Copy['FIPS'] == C]
-        ACH50_mean = Target_Stock['ACH50'].mean()
-        ACH50_dict.update({ C : ACH50_mean})
+        ACH50_BT_dict = dict()
+        for BT in BT_List:
+            Target_Building = Target_Stock[ Target_Stock['type'] == BT]
+            ACH50_mean = Target_Building['ACH50'].mean()
+            ACH50_BT_dict.update({ BT : ACH50_mean})
+        ACH50_dict.update({ C : ACH50_BT_dict})
         
-    County_gdf['ACH50_mean'] = County_gdf['FIPS'].map(ACH50_dict)
-    return County_gdf
+    #County_gdf['ACH50_mean'] = County_gdf['FIPS'].map(ACH50_dict)
+    #return County_gdf
 
-def County_to_Grid():
+    return ACH50_dict
+
+def ACH50_to_County_1(Buildings_Stock_df = init_Buildings_Stock(), County_gdf = init_County() ):
+    #This Function assigns average value of ACH50 to each County
+    #The Current Method for Averaging is per building
+    County_List = County_gdf['FIPS'].to_list()
+    BT_List = Buildings_Stock_df['type'].unique().tolist()
+    Buildings_Stock_df_Copy = Buildings_Stock_df.copy(deep = True)
+    ACH50_BT_dict = dict()
+    for BT in BT_List:
+        Target_Building = Buildings_Stock_df_Copy[ Buildings_Stock_df_Copy['type'] == BT]
+        ACH50_dict = dict()
+        for C in County_List:
+            Target_Stock = Target_Building[ Target_Building['FIPS'] == C]
+
+            ACH50_mean = Target_Stock['ACH50'].mean()
+            ACH50_dict.update({ C : ACH50_mean})
+        ACH50_BT_dict.update({ BT : ACH50_dict})
+        
+    #County_gdf['ACH50_mean'] = County_gdf['FIPS'].map(ACH50_dict)
+    #return County_gdf
+
+    return ACH50_BT_dict
+
+def ACH50_to_County(Buildings_Stock_df = init_Buildings_Stock(), County_gdf = init_County() ):
+    #This Function assigns average value of ACH50 to each County
+    #The Current Method for Averaging is per building
+    County_List = County_gdf['FIPS'].to_list()
+    BT_List = Buildings_Stock_df['type'].unique().tolist()
+    Buildings_Stock_df_Copy = Buildings_Stock_df.copy(deep = True)
+    Buildings_Stock_df_Copy['ACH50_occupants'] = Buildings_Stock_df_Copy['ACH50'] * Buildings_Stock_df_Copy['occupants']
+    ACH50_BT_dict = dict()
+    for BT in BT_List:
+        Target_Building = Buildings_Stock_df_Copy[ Buildings_Stock_df_Copy['type'] == BT]
+        ACH50_dict = dict()
+        for C in County_List:
+            Target_Stock = Target_Building[ Target_Building['FIPS'] == C]
+            occupants_sum = Target_Stock['occupants'].sum()
+            ACH50_mean = Target_Stock['ACH50_occupants'].sum() / occupants_sum
+            ACH50_dict.update({ C : ACH50_mean})
+        ACH50_BT_dict.update({ BT : ACH50_dict})
+        
+    #County_gdf['ACH50_mean'] = County_gdf['FIPS'].map(ACH50_dict)
+    #return County_gdf
+
+    return ACH50_BT_dict
+
+'''
+def County_to_Grid(County_gdf, AQ_Grid_gdf):
     # I've done something similar in 
-    # "C:\Users\matts\OneDrive - University of Waterloo\Sparks\PNAS\WorkingFolder\Code\General\counties_to_grid_Updated.py"
-    return
+    
+    County_gdf = County_gdf.to_crs("EPSG:5070")
+    AQ_Grid_gdf = AQ_Grid_gdf.to_crs("EPSG:5070")
+    
+     # Calculate areas for counties and grids
+    counties_gdf['area_county'] = counties_gdf.area
+    grid_gdf['area_grid'] = grid_gdf.area
+    
+    # Find intersections
+    intersections = gpd.overlay(AQ_Grid_gdf, County_gdf, how='intersection')
+    intersections['area_intersection'] = intersections.area
+    
+     # Calculate percentage of county area in each grid cell
+    intersections['percentage_area'] = (intersections['area_intersection'] / intersections['area_county'])
+    
+     # Create the nested dictionary
+    nested_dict = {}
+    for index, row in intersections.iterrows():
+        key = (row['COL'], row['ROW'])
+        if key not in nested_dict:
+            nested_dict[key] = {}
+        nested_dict[key][row['FIPS']] = row['percentage_area']
+        return 0
+'''
+
+
 
 def ACH50_to_INF( ACH_50):
     # There are a few ways to do this. One is shown below, from Amy Li
@@ -269,3 +372,27 @@ ax.set_title("ACH50")
 plt.show()
 
 
+#%% ACH50 Test
+
+Buildings_Stock = init_Buildings_Stock()
+Buildings_Stock['ACH50_occupant'] = Buildings_Stock['ACH50'] * Buildings_Stock['occupants']
+Plot_Histogram(Buildings_Stock['occupants'], 'Occupants')
+plt.title('Occupants')
+
+BT_list_test = Buildings_Stock['type'].unique().tolist()
+Buildings_Stock['type'].unique().tolist()
+init_AQ_Grids()
+
+test_County = init_County()
+test_ACH50 = ACH50_to_County( )
+test_ACH50_2 = ACH50_to_County_2( )
+test_ACH50_3 = ACH50_to_County_1()
+
+
+for i in BT_list_test:
+    test_County['ACH50_mean'] = test_County['FIPS'].map(test_ACH50_3[i])
+    Map_Plot(test_County, test_County['ACH50_mean'], 'ACH50 per country for Buildint Type: '+ i, name = 'ACH50 per country' +i)
+    
+for i in BT_list_test:
+    test_County['ACH50_mean'] = test_County['FIPS'].map(test_ACH50[i])
+    Map_Plot(test_County, test_County['ACH50_mean'], 'ACH50 per country for Buildint Type: '+ i + '_V2', name = 'ACH50 per country_V2' +i)
