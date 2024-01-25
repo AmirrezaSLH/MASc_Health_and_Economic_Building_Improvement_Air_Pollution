@@ -71,6 +71,8 @@ def Plot_Histogram(Plot_Values ,Plot_Title):
 def init_AQ_Grids( dir = 'Data/AQgrid.gpkg'):
     #This Function Loads the AQ Grids
     AQ_Grid_gdf = gpd.read_file(dir)
+    AQ_Grid_gdf['GRID_KEY'] = [(col, row) for col, row in zip(AQ_Grid_gdf['COL'], AQ_Grid_gdf['ROW'])]
+
     return AQ_Grid_gdf
 
 def init_County( dir = 'Data/County_Main_Land.gpkg'):
@@ -133,6 +135,46 @@ def init_Retrofit_Type( dir = 'Data/Retrofit_Types.csv' ):
 def PM_to_Grid_gdf(PM_Concentrations = init_PM_Concentrations() , AQ_Grid_gdf = init_AQ_Grids()): 
     return
 '''
+def County_to_Grid(County_gdf = init_County(),AQ_Grid_gdf = init_AQ_Grids()):
+    County_gdf['centroid'] = County_gdf.geometry.centroid
+    County_to_Grid_mapping = {}
+
+    for index, grid_row in AQ_Grid_gdf.iterrows():
+        for _, county_row in County_gdf.iterrows():
+            # Check if the centroid of the county is within the current grid cell
+            if county_row['centroid'].within(grid_row['geometry']):
+                # Create a mapping: FIPS -> (COL, ROW)
+                County_to_Grid_mapping[county_row['FIPS']] = (grid_row['COL'], grid_row['ROW'])
+
+    return County_to_Grid_mapping
+    
+def Buildings_to_Grid(Buildings_Stock_df = init_Buildings_Stock(), County_to_Grid_mapping = County_to_Grid() ):
+    Buildings_Stock_df['GRID_KEY'] = Buildings_Stock_df['FIPS'].map(County_to_Grid_mapping)
+    return Buildings_Stock_df
+
+def ACH50_to_Grid(Buildings_Stock_df = Buildings_to_Grid(), AQ_Grid_gdf = init_AQ_Grids() ):
+
+    Grid_list = Buildings_Stock_df['GRID_KEY'].unique().tolist()
+    BT_List = Buildings_Stock_df['type'].unique().tolist()
+    
+    Buildings_Stock_df_Copy = Buildings_Stock_df.copy(deep = True)
+    Buildings_Stock_df_Copy['ACH50_occupants'] = Buildings_Stock_df_Copy['ACH50'] * Buildings_Stock_df_Copy['occupants']
+    ACH50_BT_dict = dict()
+    
+    for BT in BT_List:
+        Target_Building = Buildings_Stock_df_Copy[ Buildings_Stock_df_Copy['type'] == BT]
+        ACH50_dict = dict()
+        
+        for G in Grid_list:
+            Target_Stock = Target_Building[ Target_Building['GRID_KEY'] == G]
+            Occupants_sum = Target_Stock['occupants'].sum()
+            ACH50_mean = Target_Stock['ACH50_occupants'].sum() / Occupants_sum
+            ACH50_dict.update( {G : ACH50_mean} )
+            
+        ACH50_BT_dict.update( {BT : ACH50_dict} )
+
+    return ACH50_BT_dict
+    
 def ACH50_to_County_2(Buildings_Stock_df = init_Buildings_Stock(), County_gdf = init_County() ):
     #This Function assigns average value of ACH50 to each County
     #The Current Method for Averaging is per building
@@ -191,18 +233,19 @@ def ACH50_to_County(Buildings_Stock_df = init_Buildings_Stock(), County_gdf = in
             Target_Stock = Target_Building[ Target_Building['FIPS'] == C]
             occupants_sum = Target_Stock['occupants'].sum()
             ACH50_mean = Target_Stock['ACH50_occupants'].sum() / occupants_sum
-            ACH50_dict.update({ C : ACH50_mean})
-        ACH50_BT_dict.update({ BT : ACH50_dict})
+            ACH50_dict.update( {C : ACH50_mean} )
+        ACH50_BT_dict.update( {BT : ACH50_dict} )
         
     #County_gdf['ACH50_mean'] = County_gdf['FIPS'].map(ACH50_dict)
     #return County_gdf
 
     return ACH50_BT_dict
 
-'''
-def County_to_Grid(County_gdf, AQ_Grid_gdf):
+
+
+def County_to_Grid_22(County_gdf, AQ_Grid_gdf):
     # I've done something similar in 
-    
+    '''
     County_gdf = County_gdf.to_crs("EPSG:5070")
     AQ_Grid_gdf = AQ_Grid_gdf.to_crs("EPSG:5070")
     
@@ -225,7 +268,8 @@ def County_to_Grid(County_gdf, AQ_Grid_gdf):
             nested_dict[key] = {}
         nested_dict[key][row['FIPS']] = row['percentage_area']
         return 0
-'''
+    '''
+
 
 
 
@@ -281,6 +325,55 @@ def GRID_NPV():
     return
 
 #%% Model Run
+
+def iterate_GRID( AQ_Grid_gdf = init_AQ_Grids(), County_gdf = 0, year = 1981, Interest_Rate = 0.05):
+    BMR, RR, VSL_1 = init_Health_Model()
+    PM_Concentrations, PM_dict = init_PM_Concentrations()
+    Population, Population_dict = init_Population()
+    ACH50_GRID_dict = ACH50_to_Grid()
+    ACH50_GRID_dict_sd = ACH50_GRID_dict['Single-Family Attached']
+    
+    INF_LIST = []
+    b_individial_list = []
+    b_pop_list = []
+    
+    AQ_Grid_gdf2 = AQ_Grid_gdf.copy()
+    
+    for IDX, row in AQ_Grid_gdf.iterrows():
+        Grid_Key = (row['COL'], row['ROW'])
+        if Grid_Key == (19, 1) or Grid_Key == (12, 2) or Grid_Key == (17, 4) or Grid_Key == (6, 5) or Grid_Key == (4, 6) or Grid_Key == (3, 7) or Grid_Key == (2, 9) or Grid_Key == (21, 12) or Grid_Key == (19, 13) or Grid_Key == (24, 14) or Grid_Key == (14, 15):
+            b_individial_list.append(-2000)
+            b_pop_list.append(-2000)
+            INF_LIST.append(np.nan)
+            continue
+        
+        PMC = PM_dict[year][ (row['COL'],row['ROW']) ]
+        if Grid_Key in Population_dict.keys():
+            POP = Population_dict[ (row['COL'],row['ROW']) ]
+            if POP < 1000000:
+                POP = 1000000
+        else:
+            POP = 1000000
+        ##
+        #b_individial = Benefit_Retrofit_Calculator(VSL_1, BMR, RR, PMC, 0.95, 0.8)
+        ##
+        #print(Grid_Key)
+        ACH50_row = ACH50_GRID_dict_sd[Grid_Key]
+        INF_RATE = ACH50_to_INF(ACH50_row)
+        #print(INF_RATE)
+        b_individial = PV_Benefit_Calculator(Interest_Rate, 1981, year, VSL_1, BMR, RR, PMC, INF_RATE, 0.3)
+        ##
+        b_pop = b_individial * POP
+        INF_LIST.append(INF_RATE)
+        b_individial_list.append(b_individial)
+        b_pop_list.append(b_pop)
+        
+    AQ_Grid_gdf2['FINF'] = INF_LIST
+    AQ_Grid_gdf2['Benefit_individal'] = b_individial_list
+    AQ_Grid_gdf2['Benefit_pop'] = b_pop_list
+    return AQ_Grid_gdf2
+
+'''
 def iterate_GRID( AQ_Grid_gdf = init_AQ_Grids(), County_gdf = 0, year = 1981, Interest_Rate = 0.05):
     BMR, RR, VSL_1 = init_Health_Model()
     PM_Concentrations, PM_dict = init_PM_Concentrations()
@@ -303,7 +396,9 @@ def iterate_GRID( AQ_Grid_gdf = init_AQ_Grids(), County_gdf = 0, year = 1981, In
         ##
         #b_individial = Benefit_Retrofit_Calculator(VSL_1, BMR, RR, PMC, 0.95, 0.8)
         ##
-        b_individial = PV_Benefit_Calculator(Interest_Rate, 1981, year, VSL_1, BMR, RR, PMC, 0.95, 0.8)
+        ACH50_row = row['ACH50_mean']
+        INF_RATE = ACH50_to_INF(ACH50_row)
+        b_individial = PV_Benefit_Calculator(Interest_Rate, 1981, year, VSL_1, BMR, RR, PMC, INF_RATE, 0.3)
         ##
         b_pop = b_individial * POP
         b_individial_list.append(b_individial)
@@ -311,6 +406,7 @@ def iterate_GRID( AQ_Grid_gdf = init_AQ_Grids(), County_gdf = 0, year = 1981, In
     AQ_Grid_gdf2['Benefit_individal'] = b_individial_list
     AQ_Grid_gdf2['Benefit_pop'] = b_pop_list
     return AQ_Grid_gdf2
+'''
 
 def iterate_YEAR(Interest_Rate = 0.05):
     gdf_list = []
@@ -324,6 +420,7 @@ def iterate_YEAR(Interest_Rate = 0.05):
 
 new_grid = iterate_GRID()
 new_grid.plot( column = new_grid['Benefit_individal'], legend = True, cmap = 'turbo' )
+new_grid.plot( column = new_grid['FINF'], legend = True, cmap = 'turbo' )
 
 new_grid.plot( column = new_grid['Benefit_pop'], legend = True, cmap = 'turbo' )
 
@@ -396,3 +493,23 @@ for i in BT_list_test:
 for i in BT_list_test:
     test_County['ACH50_mean'] = test_County['FIPS'].map(test_ACH50[i])
     Map_Plot(test_County, test_County['ACH50_mean'], 'ACH50 per country for Buildint Type: '+ i + '_V2', name = 'ACH50 per country_V2' +i)
+#%% County to Grid Test
+
+test_mapping = County_to_Grid()
+test_building_2 = Buildings_to_Grid()
+
+test_Grid = init_AQ_Grids()
+test_ACH50_Grid = ACH50_to_Grid()
+
+
+BT_list_test = Buildings_Stock['type'].unique().tolist()
+for i in BT_list_test:
+    test_Grid['ACH50_mean'] = test_Grid['GRID_KEY'].map(test_ACH50_Grid[i])
+    Map_Plot(test_Grid, test_Grid['ACH50_mean'], 'ACH50 per GRID for Buildint Type: '+ i, name = 'ACH50 per GRID' +i)
+
+for _, j in test_Grid.iterrows():
+    INF_RATE = ACH50_to_INF(j['ACH50_mean'])
+    print(INF_RATE)
+    
+INF_RATE = ACH50_to_INF(test_Grid['ACH50_mean'])
+    
