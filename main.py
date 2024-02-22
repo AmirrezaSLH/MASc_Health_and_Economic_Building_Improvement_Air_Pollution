@@ -135,6 +135,7 @@ def init_Retrofit_Type( dir = 'Data/Retrofit_Types.csv' ):
 def PM_to_Grid_gdf(PM_Concentrations = init_PM_Concentrations() , AQ_Grid_gdf = init_AQ_Grids()): 
     return
 '''
+
 def County_to_Grid(County_gdf = init_County(),AQ_Grid_gdf = init_AQ_Grids()):
     County_gdf['centroid'] = County_gdf.geometry.centroid
     County_to_Grid_mapping = {}
@@ -282,8 +283,9 @@ def ACH50_to_INF( ACH_50):
     F_INF = (P * ACH_Natural) / (ACH_Natural + K)
     return F_INF
 
-def Costs_Retrofit():
-    return 1
+def Costs_Retrofit(Building_Area, Retrofit_Type, Retrofit_Types_dict):
+    Cost = Building_Area * Retrofit_Types_dict[Retrofit_Type]['COST']
+    return Cost
 
 # %% Health Model
 def Delta_Exposure_Calculator(PM_Concentration, Old_F_INF, New_F_INF):
