@@ -74,7 +74,15 @@ def init_PM_Concentrations( in_dir = 'Data/PM_Grid_Daily_Concentration_1981_2010
         PM_Concentrations_dict = json.load(file)
     
     return PM_Concentrations_dict
+
+def init_PM_Concentrations_means(in_dir = 'Data/PM_Grid_Daily_Mean_Concentration_1981_2010.json'):
+    # This Function loads PM2.5 Concentration per Grid Cell per year. 
+    #Contains a string of 365 daily concentration
+    with open(in_dir, 'r') as file:
+        PM_Concentrations_dict = json.load(file)
     
+    return PM_Concentrations_dict
+
 def init_Buildings_Stock( in_dir = 'Data/Buildings_Stock.csv'):
     #This Function Loads the Buildings Stock
     Buildings_Stock_df = pd.read_csv(in_dir)
@@ -85,6 +93,29 @@ def init_ACH50(in_dir = 'Data/ACH50_Grid_1000sim.json'):
     #For each grid and building type 1000 mean ACH50 occupant based values is provided
     with open(in_dir, 'r') as file:
         ACH50_dict = json.load(file)
+    return ACH50_dict
+
+def init_ACH50_mean(in_dir = 'Data/ACH50_Grid_1000sim.json'):
+    #This function initilizes ACH50 across grid cells per building type
+    #For each grid and building type 1000 mean ACH50 occupant based values is provided
+    with open(in_dir, 'r') as file:
+        ACH50_dict = json.load(file)
+        
+    def calculate_average(lst):
+        return sum(lst) / len(lst) if lst else 0
+
+    def update_dict_with_averages(d):
+        for key, value in d.items():
+            if isinstance(value, list):
+                # Calculate the average and update the dictionary if the value is a list
+                d[key] = calculate_average(value)
+            elif isinstance(value, dict):
+                # Recursively update nested dictionaries
+                update_dict_with_averages(value)
+    
+        # Updating the original nested dictionary
+    update_dict_with_averages(ACH50_dict)
+        
     return ACH50_dict
 
 def init_Floor_Area(in_dir = 'Data/Floor_Area_Grid_1000sim.json'):
@@ -112,8 +143,10 @@ def init_Population( in_dir = 'Data/Population.csv'):
         
     return Population_dict
 
-def init_Population_Distribution():
-    return 
+def init_Population_Distribution( in_dir = 'Data/population_buildingtype_grid_percentage_mapping.json' ):
+    with open(in_dir, 'r') as file:
+        Population_Distribution = json.load(file)
+    return Population_Distribution 
 
 def init_Average_Occupancy():
     return 2
@@ -143,14 +176,19 @@ def init_Adaptation_Type( in_dir = 'Data/Adaptation_Types.csv' ):
     Adaptation_Impact_dict = Adaptation_Types_df.set_index('ATYPE')['IMPACT'].to_dict()
     
     return Adaptation_Cost_dict, Adaptation_Impact_dict
-
+'''
 def init_phi():
     
     phi = { 'Multi-Family with 5+ Units': 0.17, 'Multi-Family with 2 - 4 Units': 0.078,
              'Single-Family Attached': 0.059, 'Single-Family Detached': 0.631,
              'Mobile Home': 0.061}
     return phi
+'''
 
+def init_phi():
+    
+    phi = init_Population_Distribution()
+    return phi
 # %% Buildingd Part
 
 
@@ -176,8 +214,10 @@ def Baseline_Exposure( FINF, Cout, phi):
     #FINF is a dictionary key building type
     BT_list = FINF.keys()
     BE = 0
+    phi_bt_mapping = { 'Single-Family Detached': 'SDA', 'Single-Family Attached': 'SDA', 'Multi-Family with 2 - 4 Units':'2-4', 'Multi-Family with 5+ Units':'5P', 'Mobile Home':'M'}
+    
     for BT in BT_list:
-        
+        phi_bt = phi_bt_mapping[BT]
         #Temporary
         if pd.isna(FINF[BT]):
             #print("ACH50 is empty or NaN.")
@@ -186,15 +226,20 @@ def Baseline_Exposure( FINF, Cout, phi):
         #Temporary
         
         Cin = FINF[BT] * Cout
-        BE += Cin * phi[BT]
+        if BT == 'Single-Family Attached':
+            BE += 0
+        else:
+            BE += Cin * phi[phi_bt]
         
     return BE
 
 def Adaptation_Exposure( FINF, Cout, phi, Adaptation_Impact):
     BT_list = FINF.keys()
     AE = 0
+    phi_bt_mapping = { 'Single-Family Detached': 'SDA', 'Single-Family Attached': 'SDA', 'Multi-Family with 2 - 4 Units':'2-4', 'Multi-Family with 5+ Units':'5P', 'Mobile Home':'M'}
+
     for BT in BT_list:
-        
+        phi_bt = phi_bt_mapping[BT]
         #Temporary
         if pd.isna(FINF[BT]):
             #print("ACH50 is empty or NaN.")
@@ -203,13 +248,17 @@ def Adaptation_Exposure( FINF, Cout, phi, Adaptation_Impact):
         #Temporary
         
         Cin = FINF[BT] * Cout * Adaptation_Impact
-        AE += Cin * phi[BT]
+        if BT == 'Single-Family Attached':
+            AE += 0
+        else:
+            AE += Cin * phi[phi_bt]
         
     return AE
 
 # %% Health Model
 def Delta_Exposure_Calculator(BE, AE):
     Delta_Exposure = BE - AE  #We need to work on this, but okay for now. Assumes everyone stays home always.
+    print(Delta_Exposure)
     return Delta_Exposure
 
 def Delta_Risk_Calculator(Baseline_Mortality, Relative_Risk, BE, AE):
@@ -289,6 +338,8 @@ def iterate_YEAR(Interest_Rate, Start_Year, End_Year, GRID_KEY,
                  VSL, Baseline_Mortality, Relative_Risk):
     
     Total_Benefit = 0
+    Yearly_Benefit = []
+    Accumulated_Yearly_Benefit = []
     for Year in range(Start_Year, End_Year + 1):
         if Year == Start_Year:
             #temporary
@@ -297,9 +348,11 @@ def iterate_YEAR(Interest_Rate, Start_Year, End_Year, GRID_KEY,
             
         BE, AE, Benefit, PV_Benefit = Model_Benefit_Calculations( Interest_Rate, Start_Year, Year, GRID_KEY, PM_Concentration_dict, init_ACH50_dict, phi, Adaptation_Impact, VSL, Baseline_Mortality, Relative_Risk)
         Total_Benefit += PV_Benefit
-    
+        Yearly_Benefit.append(PV_Benefit)
+        Accumulated_Yearly_Benefit.append(Total_Benefit)
+        
     Net_Benefit = Total_Benefit - Cost
-    return Net_Benefit, Total_Benefit, Cost
+    return Net_Benefit, Total_Benefit, Cost, Yearly_Benefit, Accumulated_Yearly_Benefit
 
 def iterate_GRID(GRID_KEY_list, Interest_Rate, Start_Year, End_Year,
                  PM_Concentration_dict, init_ACH50_dict, phi, Adaptation_Impact, Adaptation_Cost,
@@ -308,6 +361,8 @@ def iterate_GRID(GRID_KEY_list, Interest_Rate, Start_Year, End_Year,
     Grid_Net_Benefit = {}
     Grid_Benefit = {}
     Grid_Cost = {}
+    Grid_Yearly_Benefit = {}
+    Grid_Accumulated_Yearly_Benefit = {}
     
     POP_Grid_Net_Benefit = {}
     POP_Grid_Benefit = {}
@@ -315,22 +370,22 @@ def iterate_GRID(GRID_KEY_list, Interest_Rate, Start_Year, End_Year,
     for GRID_KEY in GRID_KEY_list:
         print(GRID_KEY)
         Baseline_Mortality = Baseline_Mortality_dict[GRID_KEY]
-        Net_Benefit, Total_Benefit, Cost = iterate_YEAR(Interest_Rate, Start_Year, End_Year, GRID_KEY,
-                         PM_Concentration_dict, init_ACH50_dict, phi, Adaptation_Impact, Adaptation_Cost,
+        Net_Benefit, Total_Benefit, Cost, Yearly_Benefit, Accumulated_Yearly_Benefit = iterate_YEAR(Interest_Rate, Start_Year, End_Year, GRID_KEY,
+                         PM_Concentration_dict, init_ACH50_dict, phi[GRID_KEY], Adaptation_Impact, Adaptation_Cost,
                          VSL, Baseline_Mortality, Relative_Risk)
         Grid_Net_Benefit[GRID_KEY] = Net_Benefit
         Grid_Benefit[GRID_KEY] = Total_Benefit
         Grid_Cost[GRID_KEY] = Cost
+        Grid_Yearly_Benefit[GRID_KEY] = Yearly_Benefit
+        Grid_Accumulated_Yearly_Benefit[GRID_KEY] = Accumulated_Yearly_Benefit
         
         POP_Grid_Net_Benefit[GRID_KEY], POP_Grid_Benefit[GRID_KEY], POP_Grid_Cost[GRID_KEY] = Population_Benefit(GRID_KEY, Population_dict, Net_Benefit, Total_Benefit, Cost)
         
-    return  POP_Grid_Net_Benefit, POP_Grid_Benefit, POP_Grid_Cost, Grid_Net_Benefit, Grid_Benefit, Grid_Cost
+    return  POP_Grid_Net_Benefit, POP_Grid_Benefit, POP_Grid_Cost, Grid_Net_Benefit, Grid_Benefit, Grid_Cost, Grid_Yearly_Benefit, Grid_Accumulated_Yearly_Benefit
 
-def Run_Model(Adaptation_Type):
+def Run_Model(Adaptation_Type, Start_Year = 2001, End_Year = 2010):
     
     Interest_Rate = 0.07
-    Start_Year = 1981
-    End_Year = 1990
     
     PM_Concentration_dict = init_PM_Concentrations()
     init_ACH50_dict = init_ACH50()
@@ -346,12 +401,12 @@ def Run_Model(Adaptation_Type):
     
     GRID_KEY_list = init_ACH50_dict['Single-Family Detached'].keys()
     
-    POP_Grid_Net_Benefit, POP_Grid_Benefit, POP_Grid_Cost, Grid_Net_Benefit, Grid_Benefit, Grid_Cost = iterate_GRID(GRID_KEY_list, Interest_Rate, Start_Year, End_Year,
+    POP_Grid_Net_Benefit, POP_Grid_Benefit, POP_Grid_Cost, Grid_Net_Benefit, Grid_Benefit, Grid_Cost, Yearly_Benefit, Accumulated_Yearly_Benefit = iterate_GRID(GRID_KEY_list, Interest_Rate, Start_Year, End_Year,
                      PM_Concentration_dict, init_ACH50_dict, phi, Adaptation_Impact, Adaptation_Cost,
                      VSL, Baseline_Mortality_dict, Relative_Risk, Population_dict)
     
     
-    return  POP_Grid_Net_Benefit, POP_Grid_Benefit, POP_Grid_Cost, Grid_Net_Benefit, Grid_Benefit, Grid_Cost
+    return  POP_Grid_Net_Benefit, POP_Grid_Benefit, POP_Grid_Cost, Grid_Net_Benefit, Grid_Benefit, Grid_Cost, Yearly_Benefit, Accumulated_Yearly_Benefit
 
 
 #%% Plot Functions
@@ -363,13 +418,13 @@ import matplotlib.ticker as mticker
 image_save_dir = r'C:\Users\asalehi\OneDrive - University of Waterloo\Documents - SaariLab\CVC\Buildings\Amirreza\Adaptation\Plots\Feb22'
 
 def plot_geodataframe(gdf, title, column_to_plot, cmap='jet', figsize=(10, 6),
-                      title_fontsize=16, legend_fontsize=12):
+                      title_fontsize=16, legend_fontsize=12, legend_tag = 'dollar'):
     # Create the plot
     fig, ax = plt.subplots(1, 1, figsize=figsize)
     
     # Plot the GeoDataFrame
     gdf.plot(column=column_to_plot, ax=ax, legend=True, cmap=cmap,
-             legend_kwds={'label': 'Dollar'})
+             legend_kwds={'label': legend_tag})
 
     # Remove the axis for a cleaner look
     ax.set_axis_off()
@@ -378,12 +433,12 @@ def plot_geodataframe(gdf, title, column_to_plot, cmap='jet', figsize=(10, 6),
     
     # Adjust the layout to make space for the title and legend
     plt.subplots_adjust(top=0.85, bottom=0.2)
-    plt.savefig(image_save_dir + '/'+ title, dpi=300, bbox_inches='tight')
+    #plt.savefig(image_save_dir + '/'+ title, dpi=300, bbox_inches='tight')
     # Show the plot
     plt.show()
 
 def plot_geodataframe_large(gdf, title, column_to_plot, cmap='jet', figsize=(10, 6),
-                      title_fontsize=16, legend_fontsize=12):
+                      title_fontsize=16, legend_fontsize=12, legend_tag = 'dollar'):
     """
     Plots a GeoDataFrame with enhancements, including a title and a legend in millions.
     
@@ -401,7 +456,7 @@ def plot_geodataframe_large(gdf, title, column_to_plot, cmap='jet', figsize=(10,
 
     # Plot the GeoDataFrame
     plot = gdf.plot(column=column_to_plot, ax=ax, legend=True, cmap=cmap,
-                    legend_kwds={'label': 'Bilion Dollar', 'format': mticker.FuncFormatter(lambda v, pos: f'{v * 1e-9:,.0f}  ')})
+                    legend_kwds={'label': 'Milion'+legend_tag, 'format': mticker.FuncFormatter(lambda v, pos: f'{v * 1e-6:,.0f}  ')})
     
     # Add the title to the plot
     ax.set_title(title, fontsize=title_fontsize)
@@ -417,14 +472,14 @@ def plot_geodataframe_large(gdf, title, column_to_plot, cmap='jet', figsize=(10,
     # Adjust the layout to make space for the title and legend
     
     plt.subplots_adjust(top=0.85, bottom=0.2)
-    plt.savefig(image_save_dir + '/'+ title, dpi=300, bbox_inches='tight')
+    #plt.savefig(image_save_dir + '/'+ title, dpi=300, bbox_inches='tight')
     # Show the plot
     plt.show()
     
 
 #%% Plotting and Model Run
 Run1_AQ_Grids = init_AQ_Grids()
-POP_test_1_Net, POP_test_1_Benefit, POP_test_1_Cost, test_1_Net, test_1_Benefit, test_1_Cost = Run_Model( 'LBNL_20' )
+POP_test_1_Net, POP_test_1_Benefit, POP_test_1_Cost, test_1_Net, test_1_Benefit, test_1_Cost, a, b = Run_Model( 'LBNL_20' )
 Run1_AQ_Grids['Individual_Net_Benefit'] = Run1_AQ_Grids['GRID_KEY'].map(test_1_Net)
 Run1_AQ_Grids['Individual_Benefit'] = Run1_AQ_Grids['GRID_KEY'].map(test_1_Benefit)
 Run1_AQ_Grids['Individual_Cost'] = Run1_AQ_Grids['GRID_KEY'].map(test_1_Cost)
@@ -441,19 +496,156 @@ plot_geodataframe(gdf = Run1_AQ_Grids, title = 'Total Net Benefit', column_to_pl
 plot_geodataframe_large(gdf = Run1_AQ_Grids, title = 'Total Net Benefit', column_to_plot = 'POP_Net_Benefit')
 #%%
 Adaptation_List = ['LBNL_20', 'LBNL_40', 'LBNL_60', 'NREL_33', 'NREL_66', 'NREL_87']
-Adaptation_List = ['LBNL_20', 'NREL_33']
+#Adaptation_List = ['LBNL_20', 'NREL_33']
 Run1_AQ_Grids = init_AQ_Grids()
 for AT in Adaptation_List:
     Run2_AQ_Grids = init_AQ_Grids()
-    POP_test_2_Net, POP_test_2_Benefit, POP_test_2_Cost, test_2_Net, test_2_Benefit, test_2_Cost = Run_Model( AT )
+    POP_test_2_Net, POP_test_2_Benefit, POP_test_2_Cost, test_2_Net, test_2_Benefit, test_2_Cost, a,b= Run_Model( AT )
     
-    Run2_AQ_Grids['Individual_Net_Benefit'] = Run1_AQ_Grids['GRID_KEY'].map(test_2_Net)
+    Run2_AQ_Grids['Individual_Net_Benefit'] = Run2_AQ_Grids['GRID_KEY'].map(test_2_Net)
     Run2_AQ_Grids['Individual_Benefit'] = Run2_AQ_Grids['GRID_KEY'].map(test_2_Benefit)
     Run2_AQ_Grids['Individual_Cost'] = Run2_AQ_Grids['GRID_KEY'].map(test_2_Cost)
     Run2_AQ_Grids['POP_Net_Benefit'] = Run2_AQ_Grids['GRID_KEY'].map(POP_test_2_Net)
     Run2_AQ_Grids['POP_Benefit'] = Run2_AQ_Grids['GRID_KEY'].map(POP_test_2_Benefit)
     Run2_AQ_Grids['POP_Cost'] = Run2_AQ_Grids['GRID_KEY'].map(POP_test_2_Cost)
-    
+    Run2_AQ_Grids['POP_Net_Benefit'] = Run2_AQ_Grids['POP_Net_Benefit'].replace(0, np.nan)
     plot_geodataframe(gdf = Run2_AQ_Grids, title = 'Per person Net Benefit of Adaptation '+ AT, column_to_plot = 'Individual_Net_Benefit')
     plot_geodataframe_large(gdf = Run2_AQ_Grids, title = 'Total Net Benefit of Adaptation '+ AT, column_to_plot = 'POP_Net_Benefit')
     plot_geodataframe_large(gdf = Run2_AQ_Grids, title = 'Total Cost of Adaptation '+ AT, column_to_plot = 'POP_Cost')
+    
+#%%
+
+#Adaptation_List = ['LBNL_20', 'LBNL_40', 'LBNL_60', 'NREL_33', 'NREL_66', 'NREL_87']
+Adaptation_List = ['LBNL_20', 'LBNL_60', 'NREL_33', 'NREL_87']
+
+tyb = {}
+tayb = {}
+cost = {}
+for AT in Adaptation_List:
+    Run3_AQ_Grids = init_AQ_Grids()
+    POP_test_2_Net, POP_test_2_Benefit, POP_test_2_Cost, test_2_Net, test_2_Benefit, test_2_Cost, YB, AYB = Run_Model( AT, Start_Year = 2001, End_Year = 2010 )
+    tyb[AT] = YB
+    tayb[AT] = AYB
+    cost[AT] = test_2_Cost
+    s = 'Individual_Net_Benefit_'+AT
+    Run3_AQ_Grids[s] = Run3_AQ_Grids['GRID_KEY'].map(test_2_Net)
+    Run3_AQ_Grids['Individual_Benefit_'+AT] = Run3_AQ_Grids['GRID_KEY'].map(test_2_Benefit)
+    Run3_AQ_Grids['Individual_Cost_'+AT] = Run3_AQ_Grids['GRID_KEY'].map(test_2_Cost)
+    Run3_AQ_Grids['POP_Net_Benefit_'+AT] = Run3_AQ_Grids['GRID_KEY'].map(POP_test_2_Net)
+    Run3_AQ_Grids['POP_Benefit_'+AT] = Run3_AQ_Grids['GRID_KEY'].map(POP_test_2_Benefit)
+    Run3_AQ_Grids['POP_Cost_'+AT] = Run3_AQ_Grids['GRID_KEY'].map(POP_test_2_Cost)
+    
+    #plot_geodataframe(gdf = Run3_AQ_Grids, title = 'Per person Net Benefit of Adaptation '+ AT, column_to_plot = 'Individual_Net_Benefit')
+    #plot_geodataframe_large(gdf = Run3_AQ_Grids, title = 'Total Net Benefit of Adaptation '+ AT, column_to_plot = 'POP_Net_Benefit')
+    #plot_geodataframe_large(gdf = Run3_AQ_Grids, title = 'Total Cost of Adaptation '+ AT, column_to_plot = 'POP_Cost')
+
+#%% Percentage increase net benefit
+
+Run4_AQ_Grids = init_AQ_Grids()
+POP_test_41_Net, POP_test_41_Benefit, POP_test_41_Cost, test_41_Net, test_41_Benefit, test_41_Cost, YB, AYB = Run_Model( 'LBNL_20', Start_Year = 2001, End_Year = 2010 )
+POP_test_42_Net, POP_test_42_Benefit, POP_test_42_Cost, test_42_Net, test_42_Benefit, test_42_Cost, YB, AYB = Run_Model( 'LBNL_40', Start_Year = 2001, End_Year = 2010 )
+
+Run4_AQ_Grids['IND_NET_LBNL_20'] = Run4_AQ_Grids['GRID_KEY'].map(test_41_Net)
+Run4_AQ_Grids['IND_NET_LBNL_40'] = Run4_AQ_Grids['GRID_KEY'].map(test_42_Net)
+Run4_AQ_Grids['Percentage_Difference'] = 100* (Run4_AQ_Grids['IND_NET_LBNL_40'] - Run4_AQ_Grids['IND_NET_LBNL_20']) / Run4_AQ_Grids['IND_NET_LBNL_20']
+
+plot_geodataframe(gdf = Run4_AQ_Grids, title = 'Percentage Difference in Individual Net Benefit between NBNL20 and NBNL40', column_to_plot = 'Percentage_Difference', legend_tag='')
+#%% Other Plots 1
+
+data = [tyb['LBNL_20']['(10, 9)'], tyb['LBNL_40']['(10, 9)'], tyb['LBNL_60']['(10, 9)'], tyb['NREL_33']['(10, 9)'], tyb['NREL_66']['(10, 9)'], tyb['NREL_87']['(10, 9)'], [test_2_Cost['(10, 9)']]*10 ]
+years = np.arange(2001, 2011)
+Labels = ['LBNL_20', 'LBNL_40', 'LBNL_60', 'NREL_33', 'NREL_66', 'NREL_87', 'Cost']
+
+# Plotting
+plt.figure(figsize=(10, 6))  # Set figure size for better readability
+for i, row in enumerate(data):
+    plt.plot(years, row, marker='o', linestyle='-', label= Labels[i] )
+
+plt.title('Benefits of Adapation for grid (10, 9)')  # Title
+plt.xlabel('Year')  # X-axis label
+plt.ylabel('Dollars')  # Y-axis label
+plt.xticks(years, rotation=45)  # Rotate x-axis labels for better readability
+plt.legend()  # Show legend
+plt.grid(True, which='both', linestyle='--', linewidth=0.5)  # Add grid for readability
+plt.tight_layout()  # Adjust layout
+plt.show()  # Display the plot
+
+data = [tayb['LBNL_20']['(10, 9)'], tayb['LBNL_40']['(10, 9)'], tayb['LBNL_60']['(10, 9)'], tayb['NREL_33']['(10, 9)'], tayb['NREL_66']['(10, 9)'], tayb['NREL_87']['(10, 9)'], [test_2_Cost['(10, 9)']]*10]
+years = np.arange(2001, 2011)
+Labels = ['LBNL_20', 'LBNL_40', 'LBNL_60', 'NREL_33', 'NREL_66', 'NREL_87', 'Cost']
+
+# Plotting
+plt.figure(figsize=(10, 6))  # Set figure size for better readability
+for i, row in enumerate(data):
+    plt.plot(years, row, marker='o', linestyle='-', label= Labels[i] )
+
+plt.title('Cumulative Benefits of Adapation for grid (10, 9)')  # Title
+plt.xlabel('Year')  # X-axis label
+plt.ylabel('Dollars')  # Y-axis label
+plt.xticks(years, rotation=45)  # Rotate x-axis labels for better readability
+plt.legend()  # Show legend
+plt.grid(True, which='both', linestyle='--', linewidth=0.5)  # Add grid for readability
+plt.tight_layout()  # Adjust layout
+plt.show()  # Display the plot
+
+data = [tayb['LBNL_20']['(10, 9)'], tayb['LBNL_60']['(10, 9)'], tayb['NREL_33']['(10, 9)'], tayb['NREL_87']['(10, 9)'], [cost['LBNL_20']['(10, 9)']]*10, [cost['LBNL_60']['(10, 9)']]*10, [cost['NREL_33']['(10, 9)']]*10, [cost['NREL_87']['(10, 9)']]*10]
+years = np.arange(2001, 2011)
+Labels = ['LBNL_20', 'LBNL_60', 'NREL_33', 'NREL_87', 'Cost_LBNL_20', 'Cost_LBNL_60', 'Cost_NREL_33', 'Cost_LBNL_87']
+
+# Plotting
+plt.figure(figsize=(10, 6))  # Set figure size for better readability
+for i, row in enumerate(data):
+    plt.plot(years, row, linestyle='-', label= Labels[i] )
+
+plt.title('Cumulative Benefits of Adapation for grid (10, 9)')  # Title
+plt.xlabel('Year')  # X-axis label
+plt.ylabel('Dollars')  # Y-axis label
+plt.xticks(years, rotation=45)  # Rotate x-axis labels for better readability
+plt.legend()  # Show legend
+plt.grid(True, which='both', linestyle='--', linewidth=0.5)  # Add grid for readability
+plt.tight_layout()  # Adjust layout
+plt.show()  # Display the plot
+
+data = [tayb['LBNL_20']['(10, 9)'], tayb['NREL_33']['(10, 9)'], [cost['LBNL_20']['(10, 9)']]*10, [cost['NREL_33']['(10, 9)']]*10]
+years = np.arange(2001, 2011)
+Labels = ['LBNL_20', 'NREL_33', 'Cost_LBNL_20', 'Cost_NREL_33']
+
+# Plotting
+plt.figure(figsize=(10, 6))  # Set figure size for better readability
+for i, row in enumerate(data):
+    plt.plot(years, row, linestyle='-', label= Labels[i] )
+
+plt.title('Cumulative Benefits of Adapation for grid (10, 9)')  # Title
+plt.xlabel('Year')  # X-axis label
+plt.ylabel('Dollars')  # Y-axis label
+plt.xticks(years, rotation=45)  # Rotate x-axis labels for better readability
+plt.legend()  # Show legend
+plt.grid(True, which='both', linestyle='--', linewidth=0.5)  # Add grid for readability
+plt.tight_layout()  # Adjust layout
+plt.show()  # Display the plot
+#%% Other Plots 2
+Other_Plot_Run = init_AQ_Grids()
+
+PM_out = init_PM_Concentrations_means()
+Other_Plot_Run['Outdoor PM 2000'] = Other_Plot_Run['GRID_KEY'].map(PM_out['2000'])
+plot_geodataframe(gdf = Other_Plot_Run, title = 'Outdoor PM 2000', column_to_plot = 'Outdoor PM 2000', legend_tag = 'concentration')
+
+ach = init_ACH50_mean()
+Other_Plot_Run['ACH50_Single_Detached'] = Other_Plot_Run['GRID_KEY'].map(ach['Single-Family Detached'])
+plot_geodataframe(gdf = Other_Plot_Run, title = 'ACH50 Single Detached before intervention', column_to_plot = 'ACH50_Single_Detached', legend_tag = 'ACH50')
+
+bmr = init_Baseline_Mortality()
+Other_Plot_Run['bmr'] = Other_Plot_Run['GRID_KEY'].map(bmr)
+plot_geodataframe(gdf = Other_Plot_Run, title = 'Baseline Mortality Rate', column_to_plot = 'bmr', legend_tag = '')
+
+pop = init_Population()
+Other_Plot_Run['pop'] = Other_Plot_Run['GRID_KEY'].map(pop)
+Other_Plot_Run['pop'] = Other_Plot_Run['pop'].replace(0, np.nan)
+plot_geodataframe_large(gdf = Other_Plot_Run, title = 'Population 2000', column_to_plot = 'pop', legend_tag = '')
+
+pop_phi =  init_phi()
+for g in pop_phi.keys():
+    pop_phi[g] = pop_phi[g]['SDA']
+
+Other_Plot_Run['pop_phi'] = Other_Plot_Run['GRID_KEY'].map(pop_phi)
+plot_geodataframe(gdf = Other_Plot_Run, title = 'Percentage of people living in Single Detached and Attached 2010', column_to_plot = 'pop_phi', legend_tag = '')
