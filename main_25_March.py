@@ -36,7 +36,7 @@ import matplotlib.colors as mcolors
 import matplotlib.ticker as mticker
 
 # %% Initializing Data
-def init_AQ_Grids(in_dir='Data/AQgrid.gpkg'):
+def init_AQ_grids(in_dir='Data/AQgrid.gpkg'):
     """
     Initializes and processes the AQ (Air Quality) Grids from a GeoPackage file.
 
@@ -55,22 +55,22 @@ def init_AQ_Grids(in_dir='Data/AQgrid.gpkg'):
                     a new 'GRID_KEY', and only the essential columns.
     """
     # Load the AQ Grid GeoDataFrame from the specified GeoPackage file
-    AQ_Grid_gdf = gpd.read_file(in_dir)
+    AQ_grid_gdf = gpd.read_file(in_dir)
     
     # Convert the GeoDataFrame's coordinate reference system (CRS) to EPSG:4326
-    AQ_Grid_gdf.crs = "EPSG:4326"
+    AQ_grid_gdf.crs = "EPSG:4326"
     
     # Generate a 'GRID_KEY' for each grid, combining 'COL' and 'ROW' values
-    AQ_Grid_gdf['GRID_KEY'] = [str((col, row)) for col, row in zip(AQ_Grid_gdf['COL'], AQ_Grid_gdf['ROW'])]
+    AQ_grid_gdf['GRID_KEY'] = [str((col, row)) for col, row in zip(AQ_grid_gdf['COL'], AQ_grid_gdf['ROW'])]
     
     # Define the columns to keep in the final GeoDataFrame
     columns_to_keep = ['GRID_KEY', 'geometry']
     
     # Filter the GeoDataFrame to include only the specified columns
-    AQ_Grid_gdf = AQ_Grid_gdf[columns_to_keep]
+    AQ_grid_gdf = AQ_grid_gdf[columns_to_keep]
     
     # Return the processed GeoDataFrame
-    return AQ_Grid_gdf
+    return AQ_grid_gdf
 
 
 
@@ -142,13 +142,79 @@ def init_Buildings_Stock( in_dir = 'Data/Buildings_Stock.csv'):
     Buildings_Stock_df = pd.read_csv(in_dir)
     return Buildings_Stock_df
 
-def init_ACH50(in_dir = 'Data/ACH50_Grid_1000sim.json'):
+def init_ACH50(in_dir = 'Data/ACH50_Grid_Vintage_BT.json'):
     #This function initilizes ACH50 across grid cells per building type
     #For each grid and building type 1000 mean ACH50 occupant based values is provided
     with open(in_dir, 'r') as file:
         ACH50_dict = json.load(file)
     return ACH50_dict
 
+def init_ACH50_national_mean(in_dir = 'Data/ACH50_national_mean.json'):
+    #This function initilizes ACH50 across grid cells per building type
+    #For each grid and building type 1000 mean ACH50 occupant based values is provided
+    with open(in_dir, 'r') as file:
+        ACH50_national_mean = json.load(file)
+    return ACH50_national_mean
+
+def reorganized_dict(target_dict):
+    """
+    Reorganize a nested dictionary to change the hierarchy of the keys.
+
+    This function takes a dictionary with a nested structure and reorganizes it
+    such that the innermost keys become the outermost keys in the resulting dictionary.
+
+    Parameters:
+    - target_dict (dict): A nested dictionary to reorganize. It's assumed to have
+                          a structure where the first level of keys contains values
+                          that are also dictionaries, and so on.
+
+    Returns:
+    - dict: A reorganized dictionary with the innermost keys as the outermost keys.
+    
+    Example Structure:
+    - Before: target_dict[v][bt][g] -> value
+    - After: reorganized_dict[g][v][bt] -> value
+    """
+    # Initialize the new dictionary to hold the reorganized structure
+    reorganized_dict = {}
+    
+    # Iterate through each level of the nested dictionary
+    for v, bt_dict in target_dict.items():
+        for bt, g_dict in bt_dict.items():
+            for g, value in g_dict.items():
+                # Create a new hierarchy with the inner key as the primary key
+                if g not in reorganized_dict:
+                    reorganized_dict[g] = {}
+                if v not in reorganized_dict[g]:
+                    reorganized_dict[g][v] = {}
+                # Assign the value to the new key structure
+                reorganized_dict[g][v][bt] = value
+    
+    # Return the reorganized dictionary
+    return reorganized_dict
+
+def init_ach50_mean(in_dir = 'Data/ACH50_Grid_Vintage_BT.json'):
+    with open(in_dir, 'r') as file:
+        ach50 = json.load(file)
+    
+    national_average = init_ACH50_national_mean()
+
+    ach50_mean = {}
+    for v in ach50.keys():
+        ach50_mean[v] = {}
+        for bt in ach50[v].keys():
+            ach50_mean[v][bt] = {}
+            for g in ach50[v][bt].keys():
+                ach50_mean[v][bt][g] = sum(ach50[v][bt][g]) / len(ach50[v][bt][g])
+                if pd.isna(ach50_mean[v][bt][g]):
+                    segment = bt + '_' + v
+                    ach50_mean[v][bt][g] = national_average[segment]
+                
+    ach50_mean = reorganized_dict(ach50_mean)
+    return ach50_mean
+
+
+'''
 def init_ACH50_mean(in_dir = 'Data/ACH50_Grid_1000sim.json'):
     #This function initilizes ACH50 across grid cells per building type
     #For each grid and building type 1000 mean ACH50 occupant based values is provided
@@ -171,8 +237,8 @@ def init_ACH50_mean(in_dir = 'Data/ACH50_Grid_1000sim.json'):
     update_dict_with_averages(ACH50_dict)
         
     return ACH50_dict
-
-def init_Floor_Area(in_dir = 'Data/Floor_Area_Grid_1000sim.json'):
+'''
+def init_floor_area(in_dir = 'Data/Floor_Area_Grid_1000sim.json'):
     #This function initilizes Floor area across grid cells per building type
     
     '''
@@ -183,26 +249,28 @@ def init_Floor_Area(in_dir = 'Data/Floor_Area_Grid_1000sim.json'):
     '''
     return 2000
 
-def init_Population( in_dir = 'Data/Population.csv'):
+def init_population( in_dir = 'Data/Population.csv'):
     #The Current Sate of The Model only Uses 2000 Population data based on Leuple 
-    Population_df = pd.read_csv(in_dir)
+    pop_df = pd.read_csv(in_dir)
     
-    Population_dict = {}
+    pop_dict = {}
 
-    for index, row in Population_df.iterrows():
+    for index, row in pop_df.iterrows():
         population = row['2000']
         col_row_key = (row['COL'], row['ROW'])
         GRID_KEY = str(col_row_key)
-        Population_dict[GRID_KEY] = population
+        pop_dict[GRID_KEY] = population
         
-    return Population_dict
+    return pop_dict
 
+'''
 def init_Population_Distribution( in_dir = 'Data/population_buildingtype_grid_percentage_mapping.json' ):
     with open(in_dir, 'r') as file:
         Population_Distribution = json.load(file)
     return Population_Distribution 
+'''
 
-def init_Average_Occupancy():
+def init_occupancy():
     return 2
 
 def init_Baseline_Mortality( in_dir = 'Data/Baseline_Mortality.json'):
@@ -230,22 +298,91 @@ def init_Adaptation_Type( in_dir = 'Data/Adaptation_Types.csv' ):
     Adaptation_Impact_dict = Adaptation_Types_df.set_index('ATYPE')['IMPACT'].to_dict()
     
     return Adaptation_Cost_dict, Adaptation_Impact_dict
-'''
-def init_phi():
-    
-    phi = { 'Multi-Family with 5+ Units': 0.17, 'Multi-Family with 2 - 4 Units': 0.078,
-             'Single-Family Attached': 0.059, 'Single-Family Detached': 0.631,
-             'Mobile Home': 0.061}
-    return phi
-'''
 
+def init_segment_mapping():
+    
+    segment_maping = { '<1940' : { 'Multi-Family with 5+ Units': 'MF5P_V1'
+                    , 'Multi-Family with 2 - 4 Units': 'MF24_V1'
+                    , 'Single-Family Attached': 'SF_V1'
+                    , 'Single-Family Detached': 'SF_V1'
+                    , 'Mobile Home': 'MH_V1' },
+                    
+                    '1940s' : { 'Multi-Family with 5+ Units': 'MF5P_V2'
+                    , 'Multi-Family with 2 - 4 Units': 'MF24_V2'
+                    , 'Single-Family Attached': 'SF_V2'
+                    , 'Single-Family Detached': 'SF_V2'
+                    , 'Mobile Home': 'MH_V2' },
+                    
+                    '1950s' : { 'Multi-Family with 5+ Units': 'MF5P_V2'
+                    , 'Multi-Family with 2 - 4 Units': 'MF24_V2'
+                    , 'Single-Family Attached': 'SF_V2'
+                    , 'Single-Family Detached': 'SF_V2'
+                    , 'Mobile Home': 'MH_V2' },
+                    
+                    '1960s' : { 'Multi-Family with 5+ Units': 'MF5P_V2'
+                    , 'Multi-Family with 2 - 4 Units': 'MF24_V2'
+                    , 'Single-Family Attached': 'SF_V2'
+                    , 'Single-Family Detached': 'SF_V2'
+                    , 'Mobile Home': 'MH_V2' },
+                    
+                    '1970s' : { 'Multi-Family with 5+ Units': 'MF5P_V2'
+                    , 'Multi-Family with 2 - 4 Units': 'MF24_V2'
+                    , 'Single-Family Attached': 'SF_V2'
+                    , 'Single-Family Detached': 'SF_V2'
+                    , 'Mobile Home': 'MH_V2' },
+                    
+                    '1980s' : { 'Multi-Family with 5+ Units': 'MF5P_V3'
+                    , 'Multi-Family with 2 - 4 Units': 'MF24_V3'
+                    , 'Single-Family Attached': 'SF_V3'
+                    , 'Single-Family Detached': 'SF_V3'
+                    , 'Mobile Home': 'MH_V3' },
+                    
+                    '1990s' : { 'Multi-Family with 5+ Units': 'MF5P_V3'
+                    , 'Multi-Family with 2 - 4 Units': 'MF24_V3'
+                    , 'Single-Family Attached': 'SF_V3'
+                    , 'Single-Family Detached': 'SF_V3'
+                    , 'Mobile Home': 'MH_V3' },
+                    
+                    '2000s' : { 'Multi-Family with 5+ Units': 'MF5P_V3'
+                    , 'Multi-Family with 2 - 4 Units': 'MF24_V3'
+                    , 'Single-Family Attached': 'SF_V3'
+                    , 'Single-Family Detached': 'SF_V3'
+                    , 'Mobile Home': 'MH_V3' } }
+    
+    return segment_maping
+
+def segment_matching(target_dict):
+    matched_dict = {}
+    for v in target_dict.keys():
+        for bt in target_dict[v].keys():
+            segment_key = bt + '_' + v
+            #print(segment_key)
+            matched_dict[segment_key] = target_dict[v][bt]
+
+    return matched_dict
+    
 def init_phi():
     
-    phi = init_Population_Distribution()
+    #phi = init_Population_Distribution()
+    phi = {
+    'SF_V1': 0.1,
+    'SF_V2': 0.33,
+    'SF_V3': 0.3,
+    'MF24_V1': 0.1,
+    'MF24_V2': 0.03,
+    'MF24_V3': 0.03,
+    'MF5P_V1': 0.02,
+    'MF5P_V2': 0.06,
+    'MF5P_V3': 0.05,
+    'MH_V1': 0.01,
+    'MH_V2': 0.03,
+    'MH_V3': 0.02
+    }   
+
     return phi
 # %% Buildingd Part
 
-def ACH50_to_INF(ACH_50, P=0.97, K=0.39, F=20):
+def ACH50_to_Finf(ach50, P=0.97, K=0.39, F=20):
     """
     Convert blower door test results (ACH_50) to natural infiltration rate (Finf).
 
@@ -268,10 +405,10 @@ def ACH50_to_INF(ACH_50, P=0.97, K=0.39, F=20):
     - The default values provided may not be suitable for all building types and climates.
     """
     # Convert ACH_50 to natural air change rate (ACH_natural)
-    ACH_natural = ACH_50 / F
+    ach_natural = ach50 / F
     
     # Calculate natural infiltration rate (Finf)
-    Finf = (P * ACH_natural) / (ACH_natural + K)
+    Finf = (P * ach_natural) / (ach_natural + K)
     
     return Finf
 
@@ -366,7 +503,7 @@ def delta_exposure_calculator(t_in, phi, FINF_baseline, FINF_intervention, C_out
 
     Returns:
     - Tuple: 
-        - mean_C_in_delta (float): The difference in mean indoor concentrations between
+        - delta_mean_C_in (float): The difference in mean indoor concentrations between
                                    the intervention and baseline scenarios.
         - delta_exposure (float): The change in exposure to the pollutant over the
                                   specified time period, calculated using the difference
@@ -381,12 +518,12 @@ def delta_exposure_calculator(t_in, phi, FINF_baseline, FINF_intervention, C_out
     mean_C_in_intervention = mean_concentration_indoor_calculator(phi, FINF_intervention, C_out)
     
     # Compute the difference in mean indoor concentrations due to the intervention
-    mean_C_in_delta = mean_C_in_intervention - mean_C_in_baseline
+    delta_mean_C_in = mean_C_in_intervention - mean_C_in_baseline
     
     # Calculate the change in exposure over the specified time period
-    delta_exposure = t_in * mean_C_in_delta
+    delta_exposure = t_in * delta_mean_C_in
     
-    return mean_C_in_delta, delta_exposure
+    return delta_mean_C_in, delta_exposure
 
 
 def baseline_exposure_calculator( FINF, Cout, phi):
@@ -422,7 +559,7 @@ def Adaptation_Exposure( FINF, Cout, phi, Adaptation_Impact):
 # %% Health Model
 
 
-def psi_modifier(t_r, t_out, t_v, t_other, F_r, F_v, F_other):
+def psi_modifier(t_r=0, t_out=0, t_v=0, t_other=0, F_r=0, F_v=0, F_other=0):
     """
     Calculate the exposure modifier (psi) based on the time spent and infiltration factors in various microenvironments.
 
@@ -446,8 +583,8 @@ def psi_modifier(t_r, t_out, t_v, t_other, F_r, F_v, F_other):
     - The psi is dimensionless and provides a way to adjust exposure estimates to reflect time-activity patterns.
     """
     # Calculate the exposure modifier (psi)
-    psi = t_r / (t_out + t_v * F_v + t_other * F_other + t_r * F_r)
-
+    #psi = t_r / (t_out + t_v * F_v + t_other * F_other + t_r * F_r)
+    psi = (0.7 / 0.6)
     return psi
 
 
@@ -579,105 +716,139 @@ def NPV_Calculation( PV_Cost, PV_Benefit):
 def GRID_NPV():
     return
 
+#%% Result analysis functions
+
+def national_average(target_dict, pop_dict):
+    """
+    Calculate the weighted national average value of a target metric based on population data.
+
+    Parameters:
+    - target_dict (dict): A dictionary with groups as keys and target values as values.
+    - pop_dict (dict): A dictionary with groups as keys and corresponding population numbers as values.
+    
+    Returns:
+    - float: The calculated national average of the target metric, weighted by the population.
+
+    Notes:
+    - It's assumed that both dictionaries have the same groups as keys and that the population data is non-negative.
+    """
+    
+    # Initialize the accumulator for the weighted target values and total population
+    national_average_value = 0
+    total_pop = 0
+    
+    # Iterate through the groups to accumulate the weighted target values and total population
+    for g in pop_dict.keys():
+        # Accumulate the total population
+        total_pop += pop_dict[g]
+        # Accumulate the weighted target value for the group
+        national_average_value += target_dict[g] * pop_dict[g]
+    
+    # Calculate the weighted national average
+    national_average_value /= total_pop
+    
+    return national_average_value
+
 #%% Model Run
 
 
+def intervention_calculator(ach50_segment_dict):
+    ach50_segment_dict['SF_V1'] = 5 
+    #Finf_intervention = {key: ACH50_to_Finf(0*value + 5) for key, value in ach50_segment_dict.items()}
+    Finf_intervention = {key: ACH50_to_Finf(value) for key, value in ach50_segment_dict.items()}
+    return Finf_intervention
 
-#%% Plot Functions
+def run_model( intervention_function = intervention_calculator, HF = 'HF_1' ):
+    
+    #segment_maping = init_segment_mapping()
+    
+    #AQ_grids = init_AQ_grids()
+    pm_dict = init_PM_Concentrations_means()
+    pop_dict = init_population()
+    
+    grid_key_list = list(pop_dict.keys())
+    
+    ach50_dict = init_ach50_mean()
+    #ach50_dict = reorganized_dict(ach50_dict)
+    #floor_area_dict = init_floor_area()
+    #floor_area_dict = reorganized_dict(floor_area_dict)
+    #occupancy_dict = init_occupancy()
+    #occupancy_dict = reorganized_dict(occupancy_dict)
+    
+    phi = init_phi()
+    
+    t_in = 0.7
+    year = '2001'
+    psi = psi_modifier()
+    
+    VSL, RR, Y_0_dict = init_Health_Model()
+    print(VSL, RR)
+    delta_mean_C_in = {}
+    delta_exposure = {}
+    dY = {}
+    dMort = {}
+    benefit = {}
+    for g in grid_key_list:
+        
+        ach50_segment_dict = segment_matching( ach50_dict[g]  )
+        
+        FINF_baseline = {key: ACH50_to_Finf(value) for key, value in ach50_segment_dict.items()}
+        FINF_intervention = intervention_function(ach50_segment_dict)
+        
+        C_out = pm_dict[year][g]
+        
+        delta_mean_C_in[g], delta_exposure[g] = delta_exposure_calculator(t_in, phi, FINF_baseline, FINF_intervention, C_out)
+        
+        if HF == 'HF_1':
+            dY[g] = HF_1(Y_0_dict[g], RR, -delta_mean_C_in[g], psi)
+        elif HF == 'HF_2':
+            dY[g] = HF_2(Y_0_dict[g], 0.0114, -delta_mean_C_in[g], psi)
+        elif HF == 'HF_3':
+            dY[g] = HF_3(Y_0_dict[g], 0.0114, -delta_mean_C_in[g], psi)
+            
+        dMort[g] = delta_mortality_calculator(dY[g], pop_dict[g])
+        benefit[g] = health_benefit_calculator(dMort[g], VSL)
+    '''  
+    Adaptation_Cost_dict, Adaptation_Impact_dict = init_Adaptation_Type()
+    Adaptation_Impact = Adaptation_Impact_dict[Adaptation_Type]
+    Adaptation_Cost = Adaptation_Cost_dict[Adaptation_Type]
+    
+    VSL, Relative_Risk, Baseline_Mortality_dict = init_Health_Model()
+        
+    '''
+    
+    return delta_mean_C_in, dMort, benefit, dY
+#%% test run
+'''
+a1, b1, c1, delta_risk = run_model()
+a2, b2, c2 = run_model()
+a3, b3, c3, delta_risk3 = run_model()
+a4, b4, c4, delta_risk4 = run_model()
+a1_national = national_average(a1,pop_dict)
+bmr_national = national_average(bmr, pop_dict)
+delta_risk_national=  national_average(delta_risk, pop_dict)
+print(sum(b1.values()))
+print(sum(c2.values()))
+print(sum(pop_dict.values()))
 
-#Setting the name of save folder
-from datetime import datetime
-# Get the current date
-current_date = datetime.now()
-# Format the date as 'MonthDay' without spaces
-date_str = current_date.strftime("%B%d")
-image_base_save_dir = r'C:\Users\asalehi\OneDrive - University of Waterloo\Documents - SaariLab\CVC\Buildings\Amirreza\Adaptation\Plots'
-image_save_dir = os.path.join(image_base_save_dir, date_str)
+segment_maping = init_segment_mapping()
 
-def plot_geodataframe(gdf, title, column_to_plot, cmap='jet', figsize=(10, 6),
-                      title_fontsize=16, legend_fontsize=12, legend_tag = 'dollar', save = False):
-    # Create the plot
-    fig, ax = plt.subplots(1, 1, figsize=figsize)
-    
-    # Plot the GeoDataFrame
-    gdf.plot(column=column_to_plot, ax=ax, legend=True, cmap=cmap,
-             legend_kwds={'label': legend_tag})
+AQ_grids = init_AQ_grids()
+AQ_grids['DE'] = AQ_grids['GRID_KEY'].map(b1)
+AQ_grids_clean = AQ_grids.dropna(subset=['DE'])
 
-    # Remove the axis for a cleaner look
-    ax.set_axis_off()
-    
-    ax.set_title(title, fontsize=title_fontsize)
-    
-    # Adjust the layout to make space for the title and legend
-    plt.subplots_adjust(top=0.85, bottom=0.2)
-    if save == True:
-        plt.savefig(image_save_dir + '/'+ title, dpi=300, bbox_inches='tight')
-    # Show the plot
-    plt.show()
+pm_dict = init_PM_Concentrations_means()
+pop_dict = init_population()
+VSL, RR, bmr = init_Health_Model()
+grid_key_list = list(pop_dict.keys())
 
-def plot_geodataframe_large(gdf, title, column_to_plot, cmap='jet', figsize=(10, 6),
-                      title_fontsize=16, legend_fontsize=12, legend_tag = 'dollar', save = False):
-    """
-    Plots a GeoDataFrame with enhancements, including a title and a legend in millions.
-    
-    Parameters:
-    - gdf: GeoDataFrame to plot.
-    - title: Title for the plot.
-    - column_to_plot: The name of the column in the GeoDataFrame to base the plot on.
-    - cmap: Colormap for the plot.
-    - figsize: Size of the figure.
-    - title_fontsize: Font size for the plot title.
-    - legend_fontsize: Font size for the legend.
-    """
-    # Create the plot
-    fig, ax = plt.subplots(1, 1, figsize=figsize)
+ach50_dict = init_ach50_mean()
+ach50_dict_2 = reorganized_dict(ach50_dict)
+floor_area_dict = init_floor_area()
+floor_area_dict = reorganized_dict(floor_area_dict)
+occupancy_dict = init_occupancy()
+occupancy_dict = reorganized_dict(occupancy_dict)
 
-    # Plot the GeoDataFrame
-    plot = gdf.plot(column=column_to_plot, ax=ax, legend=True, cmap=cmap,
-                    legend_kwds={'label': 'Milion'+legend_tag, 'format': mticker.FuncFormatter(lambda v, pos: f'{v * 1e-6:,.0f}  ')})
-    
-    # Add the title to the plot
-    ax.set_title(title, fontsize=title_fontsize)
-    
-    # Remove the axis for a cleaner look
-    ax.set_axis_off()
-    
-    # Customize the legend
-    # Get the figure's colorbar instance and modify its label
-   # fig.colorbar(plot.get_children()[0], ax=ax, 
-   #              format=mticker.FuncFormatter(lambda v, pos: f'{v * 1e-9:,.0f} M'))
-    
-    # Adjust the layout to make space for the title and legend
-    
-    plt.subplots_adjust(top=0.85, bottom=0.2)
-    if save == True:
-        plt.savefig(image_save_dir + '/'+ title, dpi=300, bbox_inches='tight')
-    # Show the plot
-    plt.show()
-    
-def plot_histogram(data, title, xlabel, ylabel, color='skyblue', edgecolor='black', save = False):
-    """
-    Plots a histogram with the given data and customization options.
+phi = init_phi()
 
-    Parameters:
-    - data: Pandas Series containing the data to plot.
-    - title: String, title of the histogram.
-    - xlabel: String, label for the x-axis.
-    - ylabel: String, label for the y-axis.
-    - color: String, color of the histogram bars. Default is 'skyblue'.
-    - edgecolor: String, color of the bar edges. Default is 'black'.
-    """
-    plt.figure(figsize=(8, 6))  # Set figure size for better visibility
-    data.hist(color=color, edgecolor=edgecolor)
-    
-    # Add titles and labels
-    plt.title(title, fontsize=15)
-    plt.xlabel(xlabel, fontsize=12)
-    plt.ylabel(ylabel, fontsize=12)
-    
-    # Optional: Add grid for better readability
-    plt.grid(axis='y', alpha=0.75)
-
-    plt.show()
-
-#%% Tests
+'''
