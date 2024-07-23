@@ -280,7 +280,7 @@ with open(out_dir + filename_fa, 'w') as file:
 with open(out_dir + filename_oc, 'w') as file:
     json.dump(oc_dict, file, indent=4)
 
-#%% National Medians
+#%% National Medians ACH50
 
 bstock_v1_SF = bstock_v1[ bstock_v1['type'] == 'SF']
 bstock_v1_MF24 = bstock_v1[ bstock_v1['type'] == 'MF24']
@@ -334,7 +334,172 @@ filename = 'ACH50_national_mean.json'
 with open(out_dir + filename, 'w') as file:
     json.dump(national_mean_ach50, file, indent=4)
 
-#%%
+#%% Floor Area
+
+bstock = init_Buildings_Stock()
+x1 = 'SF'  # The value to replace with
+y11 = 'Single-Family Detached'  # The value to be replaced
+y12 = 'Single-Family Attached'
+
+x2 = 'MF24'  # The value to replace with
+y2 = 'Multi-Family with 2 - 4 Units'  # The value to be replaced
+
+x3 = 'MF5P'  # The value to replace with
+y3 = 'Multi-Family with 5+ Units'  # The value to be replaced
+
+x4 = 'MH'  # The value to replace with
+y4 = 'Mobile Home'  # The value to be replaced
+
+bstock['type'] = bstock['type'].replace(y11, x1)
+bstock['type'] = bstock['type'].replace(y12, x1)
+bstock['type'] = bstock['type'].replace(y2, x2)
+bstock['type'] = bstock['type'].replace(y3, x3)
+bstock['type'] = bstock['type'].replace(y4, x4)
+
+bstock_v1 = bstock[bstock['year'].isin(V1_columns)]
+bstock_v2 = bstock[bstock['year'].isin(V2_columns)]
+bstock_v3 = bstock[bstock['year'].isin(V3_columns)]
+
+bstock_v1_SF = bstock_v1[ bstock_v1['type'] == 'SF']
+bstock_v1_MF24 = bstock_v1[ bstock_v1['type'] == 'MF24']
+bstock_v1_MF5P = bstock_v1[ bstock_v1['type'] == 'MF5P']
+bstock_v1_MH = bstock_v1[ bstock_v1['type'] == 'MH']
+
+bstock_v1_SF_mean = bstock_v1_SF['sqft'].mean()
+bstock_v1_MF24_mean = bstock_v1_MF24['sqft'].mean()
+bstock_v1_MF5P_mean = bstock_v1_MF5P['sqft'].mean()
+bstock_v1_MH_mean = bstock_v1_MH['sqft'].mean()
+
+bstock_v1_SF_median = bstock_v1_SF['sqft'].median()
+bstock_v1_MF24_median = bstock_v1_MF24['sqft'].median()
+bstock_v1_MF5P_median = bstock_v1_MF5P['sqft'].median()
+bstock_v1_MH_median = bstock_v1_MH['sqft'].median()
+
+bstock_v2_SF = bstock_v2[ bstock_v2['type'] == 'SF']
+bstock_v2_MF24 = bstock_v2[ bstock_v2['type'] == 'MF24']
+bstock_v2_MF5P = bstock_v2[ bstock_v2['type'] == 'MF5P']
+bstock_v2_MH = bstock_v2[ bstock_v2['type'] == 'MH']
+
+bstock_v2_SF_mean = bstock_v2_SF['sqft'].mean()
+bstock_v2_MF24_mean = bstock_v2_MF24['sqft'].mean()
+bstock_v2_MF5P_mean = bstock_v2_MF5P['sqft'].mean()
+bstock_v2_MH_mean = bstock_v2_MH['sqft'].mean()
+
+bstock_v3_SF = bstock_v3[ bstock_v3['type'] == 'SF']
+bstock_v3_MF24 = bstock_v3[ bstock_v3['type'] == 'MF24']
+bstock_v3_MF5P = bstock_v3[ bstock_v3['type'] == 'MF5P']
+bstock_v3_MH = bstock_v3[ bstock_v3['type'] == 'MH']
+
+bstock_v3_SF_mean = bstock_v3_SF['sqft'].mean()
+bstock_v3_MF24_mean = bstock_v3_MF24['sqft'].mean()
+bstock_v3_MF5P_mean = bstock_v3_MF5P['sqft'].mean()
+bstock_v3_MH_mean = bstock_v3_MH['sqft'].mean()
+
+national_mean_flarea = {
+'SF_V1': bstock_v1_SF_mean,
+'SF_V2': bstock_v2_SF_mean,
+'SF_V3': bstock_v3_SF_mean,
+'MF24_V1': bstock_v1_MF24_mean,
+'MF24_V2': bstock_v2_MF24_mean,
+'MF24_V3': bstock_v3_MF24_mean,
+'MF5P_V1': bstock_v1_MF5P_mean,
+'MF5P_V2': bstock_v2_MF5P_mean,
+'MF5P_V3': bstock_v3_MF5P_mean,
+'MH_V1': bstock_v1_MH_mean,
+'MH_V2': bstock_v2_MH_mean,
+'MH_V3': bstock_v3_MH_mean
+}     
+
+out_dir = r'C:\Users\asalehi\OneDrive - University of Waterloo\Documents - SaariLab\CVC\Buildings\Amirreza\Adaptation\Github_Adaptation\MASc_Waterloo_Adaptation_Buildings\Data\\'
+filename = 'Floorarea_national_mean.json'
+
+# Write the dictionary to a file
+with open(out_dir + filename, 'w') as file:
+    json.dump(national_mean_flarea, file, indent=4)
+    
+#%% Occupancy
+
+bstock = init_Buildings_Stock()
+x1 = 'SF'  # The value to replace with
+y11 = 'Single-Family Detached'  # The value to be replaced
+y12 = 'Single-Family Attached'
+
+x2 = 'MF24'  # The value to replace with
+y2 = 'Multi-Family with 2 - 4 Units'  # The value to be replaced
+
+x3 = 'MF5P'  # The value to replace with
+y3 = 'Multi-Family with 5+ Units'  # The value to be replaced
+
+x4 = 'MH'  # The value to replace with
+y4 = 'Mobile Home'  # The value to be replaced
+
+bstock['type'] = bstock['type'].replace(y11, x1)
+bstock['type'] = bstock['type'].replace(y12, x1)
+bstock['type'] = bstock['type'].replace(y2, x2)
+bstock['type'] = bstock['type'].replace(y3, x3)
+bstock['type'] = bstock['type'].replace(y4, x4)
+
+bstock_v1 = bstock[bstock['year'].isin(V1_columns)]
+bstock_v2 = bstock[bstock['year'].isin(V2_columns)]
+bstock_v3 = bstock[bstock['year'].isin(V3_columns)]
+
+bstock_v1_SF = bstock_v1[ bstock_v1['type'] == 'SF']
+bstock_v1_MF24 = bstock_v1[ bstock_v1['type'] == 'MF24']
+bstock_v1_MF5P = bstock_v1[ bstock_v1['type'] == 'MF5P']
+bstock_v1_MH = bstock_v1[ bstock_v1['type'] == 'MH']
+
+bstock_v1_SF_mean = bstock_v1_SF['occupants'].mean()
+bstock_v1_MF24_mean = bstock_v1_MF24['occupants'].mean()
+bstock_v1_MF5P_mean = bstock_v1_MF5P['occupants'].mean()
+bstock_v1_MH_mean = bstock_v1_MH['occupants'].mean()
+
+bstock_v1_SF_median = bstock_v1_SF['sqft'].median()
+bstock_v1_MF24_median = bstock_v1_MF24['sqft'].median()
+bstock_v1_MF5P_median = bstock_v1_MF5P['sqft'].median()
+bstock_v1_MH_median = bstock_v1_MH['sqft'].median()
+
+bstock_v2_SF = bstock_v2[ bstock_v2['type'] == 'SF']
+bstock_v2_MF24 = bstock_v2[ bstock_v2['type'] == 'MF24']
+bstock_v2_MF5P = bstock_v2[ bstock_v2['type'] == 'MF5P']
+bstock_v2_MH = bstock_v2[ bstock_v2['type'] == 'MH']
+
+bstock_v2_SF_mean = bstock_v2_SF['occupants'].mean()
+bstock_v2_MF24_mean = bstock_v2_MF24['occupants'].mean()
+bstock_v2_MF5P_mean = bstock_v2_MF5P['occupants'].mean()
+bstock_v2_MH_mean = bstock_v2_MH['occupants'].mean()
+
+bstock_v3_SF = bstock_v3[ bstock_v3['type'] == 'SF']
+bstock_v3_MF24 = bstock_v3[ bstock_v3['type'] == 'MF24']
+bstock_v3_MF5P = bstock_v3[ bstock_v3['type'] == 'MF5P']
+bstock_v3_MH = bstock_v3[ bstock_v3['type'] == 'MH']
+
+bstock_v3_SF_mean = bstock_v3_SF['occupants'].mean()
+bstock_v3_MF24_mean = bstock_v3_MF24['occupants'].mean()
+bstock_v3_MF5P_mean = bstock_v3_MF5P['occupants'].mean()
+bstock_v3_MH_mean = bstock_v3_MH['occupants'].mean()
+
+national_mean_occupants = {
+'SF_V1': bstock_v1_SF_mean,
+'SF_V2': bstock_v2_SF_mean,
+'SF_V3': bstock_v3_SF_mean,
+'MF24_V1': bstock_v1_MF24_mean,
+'MF24_V2': bstock_v2_MF24_mean,
+'MF24_V3': bstock_v3_MF24_mean,
+'MF5P_V1': bstock_v1_MF5P_mean,
+'MF5P_V2': bstock_v2_MF5P_mean,
+'MF5P_V3': bstock_v3_MF5P_mean,
+'MH_V1': bstock_v1_MH_mean,
+'MH_V2': bstock_v2_MH_mean,
+'MH_V3': bstock_v3_MH_mean
+}     
+
+out_dir = r'C:\Users\asalehi\OneDrive - University of Waterloo\Documents - SaariLab\CVC\Buildings\Amirreza\Adaptation\Github_Adaptation\MASc_Waterloo_Adaptation_Buildings\Data\\'
+filename = 'Occupants_national_mean.json'
+
+# Write the dictionary to a file
+with open(out_dir + filename, 'w') as file:
+    json.dump(national_mean_occupants, file, indent=4)
+#%% 
 
 county_grid_map = init_Country_to_Grid_Percentage_Mapping()
 county_grid_map.keys()
