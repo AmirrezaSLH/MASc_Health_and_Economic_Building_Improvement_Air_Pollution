@@ -1,4 +1,4 @@
-# 🏥 Health_IAQ_Airtightness_Framework (Precursor)
+
 
 This repository contains the **original spatial health and air quality modeling framework**, designed to analyze the impact of building airtightness interventions on indoor air quality (IAQ), health outcomes (e.g., mortality reduction), and associated cost-benefit metrics across the U.S.
 
